@@ -1,8 +1,9 @@
 - [Building](#building)
-  - [Build for Windows](#build-for-windows)
-  - [Build for MacOS (Apple Silicon)](#build-for-macos-apple-silicon)
-  - [Build for MacOS (Intel)](#build-for-macos-intel)
-  - [Build for Linux](#build-for-linux)
+  - [On MacOS](#on-macos)
+    - [for Windows](#for-windows)
+    - [for MacOS (Apple Silicon)](#for-macos-apple-silicon)
+    - [for MacOS (Intel)](#for-macos-intel)
+    - [for Linux](#for-linux)
 - [Running](#running)
   - [Without checking last *low\_stock*](#without-checking-last-low_stock)
   - [With checking last *low\_stock*](#with-checking-last-low_stock)
@@ -10,22 +11,24 @@
 
 # Building
 > You have to have Go installed
-## Build for Windows
+
+## On MacOS
+### for Windows
 ```bash
 env GOOS=windows GOARCH=amd64 go build -o bin/main.exe main.go
 ```
 
-## Build for MacOS (Apple Silicon)
+### for MacOS (Apple Silicon)
 ```bash
 env GOOS=darwin GOARCH=arm64 go build -o bin/main main.go
 ```
 
-## Build for MacOS (Intel)
+### for MacOS (Intel)
 ```bash
 env GOOS=darwin GOARCH=amd64 go build -o bin/main main.go
 ```
 
-## Build for Linux
+### for Linux
 ```bash
 env GOOS=linux GOARCH=amd64 go build -o bin/main main.go
 ```

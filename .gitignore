@@ -17,3 +17,5 @@
 *.csv
 *.txt
 bin/
+
+**/.DS_Store
