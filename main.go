@@ -238,10 +238,12 @@ func report_low_stock(etsy_data map[string]string, money_data map[string]int) ma
 
 func report_new_low_stock(ols_data map[string]int, low_stock_data map[string]int) {
 	var new_low_stock []string
+
+	// for every new low_stock SKUs
 	for sku := range low_stock_data {
 		q, in_old := ols_data[sku]
 
-		// skip SKU that isn't in money_data
+		// skip SKU that is also in the old low_stock
 		if in_old {
 			continue
 		}
@@ -271,8 +273,11 @@ func report_wrong_sku(etsy_data map[string]string, money_data map[string]int) {
 
 		// skip SKU that isn't in money_data
 		if !in_money {
-			title := strings.TrimSpace(etsy_data[sku][:60])
-			str := fmt.Sprintf("%s,%s", sku, title)
+			title := strings.TrimSpace(etsy_data[sku])
+			if len(title) > 60 {
+				title = title[:60]
+			}
+			str := fmt.Sprintf("%s,\"%s\"", sku, title)
 			wrong_sku = append(wrong_sku, str)
 		}
 	}
