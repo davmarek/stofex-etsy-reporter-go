@@ -1,0 +1,32 @@
+name: Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+        
+      - name: Setup Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.19.3
+        
+      - name: Generate build files
+        uses: thatisuday/go-cross-build@v1
+        with:
+            platforms: 'linux/amd64, darwin/amd64, windows/amd64, darwin/arm64'
+            name: 'rep'
+            dest: 'dist'
+        
+      - name: Upload build files
+        uses: actions/upload-artifact@v3
+        with:
+          name: go-build-files
+          path: dist/*
