@@ -9,6 +9,15 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        arch: [ armd64, arm64 ]
+        os: [ windows, darwin ]
+        exclude:
+          - arch: arm64
+            os: windows
+    
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
@@ -18,13 +27,8 @@ jobs:
         with:
           go-version: 1.19.3
         
-      - name: Generate build files
-        uses: thatisuday/go-cross-build@v1
-        with:
-            platforms: 'linux/amd64, darwin/amd64, windows/amd64, darwin/arm64'
-            name: 'rep'
-            package: ''
-            dest: 'dist'
+      - name: Generate build file
+        run: go build -o "dist/rep-${{ matrix.os }}{{ matrix.arch }}" main.go
         
       - name: Upload build files
         uses: actions/upload-artifact@v3
