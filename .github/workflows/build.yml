@@ -28,7 +28,7 @@ jobs:
           go-version: 1.19.3
         
       - name: Generate build file
-        run: env GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -o "dist/${{ matrix.os }}-${{ matrix.arch }}/rep${{ (matrix.os == windows) && '.exe' || '' }}" main.go
+        run: env GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -o "dist/${{ matrix.os }}-${{ matrix.arch }}/rep${{ (matrix.os == 'windows') && '.exe' || '' }}" main.go
         
       - name: Upload build files
         uses: actions/upload-artifact@v3
