@@ -12,7 +12,7 @@ jobs:
     
     strategy:
       matrix:
-        arch: [ armd64, arm64 ]
+        arch: [ amd64, arm64 ]
         os: [ windows, darwin ]
         exclude:
           - arch: arm64
