@@ -26,9 +26,11 @@ jobs:
         uses: actions/setup-go@v3
         with:
           go-version: 1.19.3
+          
+      
         
       - name: Generate build file
-        run: go build -o "dist/rep-${{ matrix.os }}{{ matrix.arch }}" main.go
+        run: env GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -o "dist/rep-${{ matrix.os }}${{ matrix.arch }}" main.go
         
       - name: Upload build files
         uses: actions/upload-artifact@v3
