@@ -23,6 +23,7 @@ jobs:
         with:
             platforms: 'linux/amd64, darwin/amd64, windows/amd64, darwin/arm64'
             name: 'rep'
+            package: ''
             dest: 'dist'
         
       - name: Upload build files
