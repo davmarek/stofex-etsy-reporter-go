@@ -8,8 +8,10 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -37,46 +39,238 @@ func check(e error) {
 
 func main() {
 	// filepaths from flags
-	etsyFilepathPtr := flag.String("etsy", "etsy.csv", "filepath")
-	moneyFilepathPtr := flag.String("money", "sklad.csv", "filepath")
-	olsFilepathPtr := flag.String("ols", "", "old low stock")
+	etsyFilenamePtr := flag.String("etsy", "etsy.csv", "filename")
+	moneyFilenamePtr := flag.String("money", "sklad.csv", "filename")
+	olsFilenamePtr := flag.String("ols", "", "old low stock")
 
 	flag.Parse()
 
-	fmt.Println("Etsy CSV filepath:", *etsyFilepathPtr)
-	fmt.Println("Money CSV filepath:", *moneyFilepathPtr)
+	pwd := getPwd()
+
+	etsyFilepath := filepath.Join(pwd, *etsyFilenamePtr)
+	moneyFilepath := filepath.Join(pwd, *moneyFilenamePtr)
+
+	fmt.Println("Etsy CSV filepath:", etsyFilepath)
+	fmt.Println("Money CSV filepath:", moneyFilepath)
 
 	// load Etsy data to map
-	etsy_data := load_etsy_data(*etsyFilepathPtr)
+	etsy_data := loadEtsyData(etsyFilepath)
 	// load Money data to map
-	money_data := load_money_data(*moneyFilepathPtr)
+	money_data := loadMoneyData(moneyFilepath)
 
 	// report low stock to 4 files (all, sub0, sub10, sub50)
 	// rewrites current low_stock.csv
-	low_stock := report_low_stock(etsy_data, money_data)
+	low_stock := reportLowStock(etsy_data, money_data)
 
 	// report SKUs that are on Etsy but not in Money
 	// to file wrong_sku.csv
-	report_wrong_sku(etsy_data, money_data)
+	reportWrongSKU(etsy_data, money_data)
 
 	// if user set path to old low_stock,
 	// check for restock and new low_stock
-	if *olsFilepathPtr != "" {
-		fmt.Println("Old low stock CSV filepath:", *olsFilepathPtr)
-		ols_data := load_low_stock_data(*olsFilepathPtr)
+	if *olsFilenamePtr != "" {
+		olsFilepath := filepath.Join(pwd, *olsFilenamePtr)
 
-		report_restock(ols_data, money_data)
-		report_new_low_stock(ols_data, low_stock)
+		fmt.Println("Old low stock CSV filepath:", olsFilepath)
+		ols_data := loadLowStockData(olsFilepath)
+
+		reportRestock(ols_data, money_data)
+		reportNewLowStock(ols_data, low_stock)
 	}
 
 }
 
-func load_etsy_data(filepath string) map[string]string {
-	f, err := os.Open(filepath)
+func getPwd() string {
+	ex, err := os.Executable()
+	check(err)
+	fmt.Println(ex)
+	return filepath.Dir(ex)
+}
 
-	if err != nil {
-		log.Fatal(err)
+func reportLowStock(etsy_data map[string]string, money_data map[string]int) map[string]int {
+	low_stock := make(map[string]int)
+	var stock_sub_0, stock_sub_10, stock_sub_50 []string
+
+	for sku := range etsy_data {
+		q, in_money := money_data[sku]
+
+		// skip SKU that isn't in money_data
+		if !in_money {
+			continue
+		}
+
+		str := fmt.Sprintf("%s,%d", sku, q)
+		// check for different levels of shortage
+		if q < 0 {
+			stock_sub_0 = append(stock_sub_0, str)
+			low_stock[sku] = q
+		} else if q < 10 {
+			stock_sub_10 = append(stock_sub_10, str)
+			low_stock[sku] = q
+		} else if q < 50 {
+			stock_sub_50 = append(stock_sub_50, str)
+			low_stock[sku] = q
+		}
 	}
+
+	// all reports combined
+	stock_sub_all := append(stock_sub_0, stock_sub_10...)
+	stock_sub_all = append(stock_sub_all, stock_sub_50...)
+
+	// write to all the files
+	const header = "SKU,QUANTITY"
+	writeToPwd(filenameLowStockSub0, stock_sub_0, header)
+	writeToPwd(filenameLowStockSub10, stock_sub_10, header)
+	writeToPwd(filenameLowStockSub50, stock_sub_50, header)
+
+	writeToReportFolder(filenameLowStockSub0, stock_sub_0, header)
+	writeToReportFolder(filenameLowStockSub10, stock_sub_10, header)
+	writeToReportFolder(filenameLowStockSub50, stock_sub_50, header)
+
+	//now := time.Now()
+	// TODO: filename := fmt.Sprintf("low_stock%d%d.csv", now.Day(), now.Month())
+	writeToPwd(filenameLowStock, stock_sub_all, header)
+
+	return low_stock
+}
+
+func reportNewLowStock(ols_data map[string]int, low_stock_data map[string]int) {
+	var new_low_stock []string
+
+	// for every new low_stock SKUs
+	for sku := range low_stock_data {
+		q, in_old := ols_data[sku]
+
+		// skip SKU that is also in the old low_stock
+		if in_old {
+			continue
+		}
+
+		str := fmt.Sprintf("%s,%d", sku, q)
+		new_low_stock = append(new_low_stock, str)
+
+	}
+
+	if len(new_low_stock) > 0 {
+		const header string = "SKU,QUANTITY"
+		const filename string = filenameLowStockNew
+
+		writeToPwd(filename, new_low_stock, header)
+		fmt.Println("Changed file: " + filename)
+	} else {
+		fmt.Println("No new low stock found")
+	}
+
+}
+
+func reportWrongSKU(etsy_data map[string]string, money_data map[string]int) {
+	var wrong_sku []string
+
+	for sku := range etsy_data {
+		_, in_money := money_data[sku]
+
+		// skip SKU that isn't in money_data
+		if !in_money {
+			title := strings.TrimSpace(etsy_data[sku])
+			if len(title) > 60 {
+				title = title[:60]
+			}
+			str := fmt.Sprintf("%s,\"%s\"", sku, title)
+			wrong_sku = append(wrong_sku, str)
+		}
+	}
+
+	if len(wrong_sku) > 0 {
+		const header string = "SKU,TITLE"
+		const filename string = filenameWrongSKU
+		writeToPwd(filename, wrong_sku, header)
+		writeToReportFolder(filename, wrong_sku, header)
+
+		fmt.Println("Changed file: " + filename)
+	} else {
+		fmt.Println("No wrong SKUs found")
+	}
+}
+
+func reportRestock(ols_data map[string]int, money_data map[string]int) {
+	var restocks []string
+
+	for sku, old_q := range ols_data {
+		new_q, in_money := money_data[sku]
+		if !in_money {
+			continue
+		}
+		if new_q > old_q && new_q >= 50 {
+			str := fmt.Sprintf("%s,%d,%d", sku, old_q, new_q)
+			restocks = append(restocks, str)
+		}
+	}
+
+	if len(restocks) > 0 {
+		const header = "SKU,OLD QUANTITY,NEW QUANTITY"
+		const filename string = filenameRestock
+		writeToPwd(filename, restocks, header)
+		writeToPwd(filename, restocks, header)
+
+		fmt.Println("Changed file: " + filename)
+
+	} else {
+		fmt.Println("No restocks found")
+	}
+
+}
+
+func writeToPwd(filename string, lines []string, header string) {
+	pwd := getPwd()
+
+	fullFilePath := filepath.Join(pwd, filename)
+
+	f, err := os.Create(fullFilePath)
+	check(err)
+
+	defer f.Close()
+
+	w := bufio.NewWriter(f)
+
+	_, err = w.WriteString(strings.Join(append([]string{header}, lines...), "\n"))
+	check(err)
+
+	w.Flush()
+}
+
+func writeToReportFolder(filename string, lines []string, header string) {
+	pwd := getPwd()
+
+	n := time.Now().Local()
+	dateFolderName := fmt.Sprintf("%d%d%d_%d%d", n.Year(), n.Day(), n.Month(), n.Hour(), n.Minute())
+	reportFilepath := filepath.Join(pwd, "reports", dateFolderName)
+
+	_, err := os.Stat(reportFilepath)
+	if !os.IsNotExist(err) {
+		check(err)
+	}
+
+	err = os.MkdirAll(reportFilepath, os.ModePerm)
+	check(err)
+
+	f, err := os.Create(filepath.Join(reportFilepath, filename))
+	check(err)
+
+	defer f.Close()
+
+	w := bufio.NewWriter(f)
+
+	_, err = w.WriteString(strings.Join(append([]string{header}, lines...), "\n"))
+	check(err)
+
+	w.Flush()
+}
+
+// ==== LOADERS ====
+
+func loadEtsyData(filepath string) map[string]string {
+	f, err := os.Open(filepath)
+	check(err)
 
 	r := csv.NewReader(bufio.NewReader(f))
 
@@ -94,9 +288,7 @@ func load_etsy_data(filepath string) map[string]string {
 			break
 		}
 
-		if err != nil {
-			log.Fatal(err)
-		}
+		check(err)
 
 		if strings.Contains(row[etsyColumnSKU], ",") {
 			// split into SKUs
@@ -119,7 +311,7 @@ func load_etsy_data(filepath string) map[string]string {
 	return etsy_listings
 }
 
-func load_money_data(filepath string) map[string]int {
+func loadMoneyData(filepath string) map[string]int {
 	f, err := os.Open(filepath)
 	check(err)
 
@@ -156,7 +348,7 @@ func load_money_data(filepath string) map[string]int {
 	return money_listings
 }
 
-func load_low_stock_data(filepath string) map[string]int {
+func loadLowStockData(filepath string) map[string]int {
 	f, err := os.Open(filepath)
 	check(err)
 
@@ -191,145 +383,4 @@ func load_low_stock_data(filepath string) map[string]int {
 	}
 
 	return ols_listings
-}
-
-func report_low_stock(etsy_data map[string]string, money_data map[string]int) map[string]int {
-	low_stock := make(map[string]int)
-	var stock_sub_0, stock_sub_10, stock_sub_50 []string
-
-	for sku := range etsy_data {
-		q, in_money := money_data[sku]
-
-		// skip SKU that isn't in money_data
-		if !in_money {
-			continue
-		}
-
-		str := fmt.Sprintf("%s,%d", sku, q)
-		// check for different levels of shortage
-		if q < 0 {
-			stock_sub_0 = append(stock_sub_0, str)
-			low_stock[sku] = q
-		} else if q < 10 {
-			stock_sub_10 = append(stock_sub_10, str)
-			low_stock[sku] = q
-		} else if q < 50 {
-			stock_sub_50 = append(stock_sub_50, str)
-			low_stock[sku] = q
-		}
-	}
-
-	// all reports combined
-	stock_sub_all := append(stock_sub_0, stock_sub_10...)
-	stock_sub_all = append(stock_sub_all, stock_sub_50...)
-
-	// write to all the files
-	const header = "SKU,QUANTITY"
-	write_file(filenameLowStockSub0, stock_sub_0, header)
-	write_file(filenameLowStockSub10, stock_sub_10, header)
-	write_file(filenameLowStockSub50, stock_sub_50, header)
-
-	//now := time.Now()
-	// TODO: filename := fmt.Sprintf("low_stock%d%d.csv", now.Day(), now.Month())
-	write_file(filenameLowStock, stock_sub_all, header)
-
-	return low_stock
-}
-
-func report_new_low_stock(ols_data map[string]int, low_stock_data map[string]int) {
-	var new_low_stock []string
-
-	// for every new low_stock SKUs
-	for sku := range low_stock_data {
-		q, in_old := ols_data[sku]
-
-		// skip SKU that is also in the old low_stock
-		if in_old {
-			continue
-		}
-
-		str := fmt.Sprintf("%s,%d", sku, q)
-		new_low_stock = append(new_low_stock, str)
-
-	}
-
-	if len(new_low_stock) > 0 {
-		const header string = "SKU,QUANTITY"
-		const filename string = filenameLowStockNew
-
-		write_file(filename, new_low_stock, header)
-		fmt.Println("Changed file: " + filename)
-	} else {
-		fmt.Println("No new low stock found")
-	}
-
-}
-
-func report_wrong_sku(etsy_data map[string]string, money_data map[string]int) {
-	var wrong_sku []string
-
-	for sku := range etsy_data {
-		_, in_money := money_data[sku]
-
-		// skip SKU that isn't in money_data
-		if !in_money {
-			title := strings.TrimSpace(etsy_data[sku])
-			if len(title) > 60 {
-				title = title[:60]
-			}
-			str := fmt.Sprintf("%s,\"%s\"", sku, title)
-			wrong_sku = append(wrong_sku, str)
-		}
-	}
-
-	if len(wrong_sku) > 0 {
-		const header string = "SKU,TITLE"
-		const filename string = filenameWrongSKU
-		write_file(filename, wrong_sku, header)
-
-		fmt.Println("Changed file: " + filename)
-	} else {
-		fmt.Println("No wrong SKUs found")
-	}
-}
-
-func report_restock(ols_data map[string]int, money_data map[string]int) {
-	var restocks []string
-
-	for sku, old_q := range ols_data {
-		new_q, in_money := money_data[sku]
-		if !in_money {
-			continue
-		}
-		if new_q > old_q && new_q >= 50 {
-			str := fmt.Sprintf("%s,%d,%d", sku, old_q, new_q)
-			restocks = append(restocks, str)
-		}
-	}
-
-	if len(restocks) > 0 {
-		const header = "SKU,OLD QUANTITY,NEW QUANTITY"
-		const filename string = filenameRestock
-		write_file(filename, restocks, header)
-
-		fmt.Println("Changed file: " + filename)
-
-	} else {
-		fmt.Println("No restocks found")
-	}
-
-}
-
-func write_file(filepath string, lines []string, header string) {
-	f, err := os.Create(filepath)
-	check(err)
-
-	defer f.Close()
-
-	w := bufio.NewWriter(f)
-
-	_, err = w.WriteString(strings.Join(append([]string{header}, lines...), "\n"))
-	check(err)
-
-	w.Flush()
 }
