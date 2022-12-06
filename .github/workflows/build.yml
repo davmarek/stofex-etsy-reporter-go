@@ -9,29 +9,28 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     strategy:
       matrix:
-        arch: [ amd64, arm64 ]
-        os: [ windows, darwin ]
+        arch: [amd64, arm64]
+        os: [windows, darwin]
         exclude:
           - arch: arm64
             os: windows
-    
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
-        
+
       - name: Setup Go
         uses: actions/setup-go@v3
         with:
           go-version: 1.19
-        
       - name: Generate build file
-        run: env GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -o "dist/${{ matrix.os }}-${{ matrix.arch }}/rep${{ (matrix.os == 'windows') && '.exe' || '' }}" main.go
-        
+        run: env GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -o "dist/${{ matrix.os }}-${{ matrix.arch }}/rep${{ (matrix.os == 'windows') && '.exe' || '' }}"
+
       - name: Upload build files
         uses: actions/upload-artifact@v3
         with:
-          name: "${{ matrix.os }}-${{ matrix.arch }}"
-          path: "dist/${{ matrix.os }}-${{ matrix.arch }}/rep*"
+          name: '${{ matrix.os }}-${{ matrix.arch }}'
+          path: 'dist/${{ matrix.os }}-${{ matrix.arch }}/rep*'
