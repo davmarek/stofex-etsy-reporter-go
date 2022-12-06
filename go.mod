@@ -1,3 +1,3 @@
-module github.com/davmarek/stofex-etsy-reporter
+module etsy-reporter
 
 go 1.19

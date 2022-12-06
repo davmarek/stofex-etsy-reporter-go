@@ -36,16 +36,10 @@ const (
 	filenameLowStockNew   string = "low_stock_new.csv"
 )
 
-func check(e error) {
-	if e != nil {
-		log.Fatal(e)
-	}
-}
-
 func main() {
 	// filepaths from flags
 	etsyFilenamePtr := flag.String("etsy", "etsy.csv", "filename")
-	moneyFilenamePtr := flag.String("money", "sklad.csv", "filename")
+	moneyFilenamePtr := flag.String("money", "export.csv", "filename")
 	olsFilenamePtr := flag.String("ols", "", "old low stock")
 
 	flag.Parse()
@@ -59,9 +53,9 @@ func main() {
 	fmt.Println("Money CSV filepath:", moneyFilepath)
 
 	// load Etsy data to map
-	etsy_data := loadEtsyData(etsyFilepath)
+	etsy_data := LoadEtsyData(etsyFilepath)
 	// load Money data to map
-	money_data := loadMoneyData(moneyFilepath)
+	money_data := LoadMoneyData(moneyFilepath)
 
 	// report low stock to 4 files (all, sub0, sub10, sub50)
 	// rewrites current low_stock.csv
@@ -77,12 +71,18 @@ func main() {
 		olsFilepath := filepath.Join(pwd, *olsFilenamePtr)
 
 		fmt.Println("Old low stock CSV filepath:", olsFilepath)
-		ols_data := loadLowStockData(olsFilepath)
+		ols_data := LoadLowStockData(olsFilepath)
 
 		reportRestock(ols_data, money_data)
 		reportNewLowStock(ols_data, low_stock)
 	}
 
+}
+
+func check(e error) {
+	if e != nil {
+		log.Fatal(e)
+	}
 }
 
 func getPwd() string {
@@ -277,12 +277,12 @@ func writeToReportFolder(fn string, lns []string, h string) {
 
 func generateCurrentDateFolderName() string {
 	n := time.Now().Local()
-	return fmt.Sprintf("%d%d%d_%02d%02d", n.Year(), n.Day(), n.Month(), n.Hour(), n.Minute())
+	return fmt.Sprintf("%d%02d%02d_%02d%02d", n.Year(), n.Day(), n.Month(), n.Hour(), n.Minute())
 }
 
 // ==== LOADERS ====
 
-func loadEtsyData(fp string) EtsyData {
+func LoadEtsyData(fp string) EtsyData {
 	f, err := os.Open(fp)
 	check(err)
 
@@ -325,7 +325,7 @@ func loadEtsyData(fp string) EtsyData {
 	return etsy_listings
 }
 
-func loadMoneyData(fp string) MoneyData {
+func LoadMoneyData(fp string) MoneyData {
 	f, err := os.Open(fp)
 	check(err)
 
@@ -362,7 +362,7 @@ func loadMoneyData(fp string) MoneyData {
 	return money_listings
 }
 
-func loadLowStockData(fp string) LowStockData {
+func LoadLowStockData(fp string) LowStockData {
 	f, err := os.Open(fp)
 	check(err)
 

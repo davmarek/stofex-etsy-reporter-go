@@ -7,7 +7,7 @@
     {
       "label": "Build and run",
       "type": "shell",
-      "command": "go build main.go && ./main",
+      "command": "go build -o 'main' . && ./main",
       "presentation": {
         "reveal": "always",
         "panel": "shared",
