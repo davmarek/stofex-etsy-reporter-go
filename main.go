@@ -14,13 +14,18 @@ import (
 	"time"
 )
 
+type EtsyData map[string]string
+type MoneyData map[string]int
+type LowStockData map[string]int
+
+// Ls = Low stock
 const (
-	etsyColumnSKU       int = 23
-	etsyColumnTitle     int = 0
-	moneyColumnSKU      int = 3
-	moneyColumnQuantity int = 4
-	olsColumnSKU        int = 0
-	olsColumnQuantity   int = 1
+	EtsySKUColumn       int = 23
+	EtsyTitleColumn     int = 0
+	MoneySKUColumn      int = 3
+	MoneyQuantityColumn int = 4
+	LsSKUColumn         int = 0
+	LsQuantityColumn    int = 1
 
 	filenameLowStock      string = "low_stock.csv"
 	filenameLowStockSub0  string = "low_stock_sub0.csv"
@@ -87,12 +92,12 @@ func getPwd() string {
 	return filepath.Dir(ex)
 }
 
-func reportLowStock(etsy_data map[string]string, money_data map[string]int) map[string]int {
-	low_stock := make(map[string]int)
+func reportLowStock(ed EtsyData, md MoneyData) LowStockData {
+	lsd := make(LowStockData)
 	var stock_sub_0, stock_sub_10, stock_sub_50 []string
 
-	for sku := range etsy_data {
-		q, in_money := money_data[sku]
+	for sku := range ed {
+		q, in_money := md[sku]
 
 		// skip SKU that isn't in money_data
 		if !in_money {
@@ -103,43 +108,48 @@ func reportLowStock(etsy_data map[string]string, money_data map[string]int) map[
 		// check for different levels of shortage
 		if q < 0 {
 			stock_sub_0 = append(stock_sub_0, str)
-			low_stock[sku] = q
+			lsd[sku] = q
 		} else if q < 10 {
 			stock_sub_10 = append(stock_sub_10, str)
-			low_stock[sku] = q
+			lsd[sku] = q
 		} else if q < 50 {
 			stock_sub_50 = append(stock_sub_50, str)
-			low_stock[sku] = q
+			lsd[sku] = q
 		}
 	}
 
-	// all reports combined
-	stock_sub_all := append(stock_sub_0, stock_sub_10...)
-	stock_sub_all = append(stock_sub_all, stock_sub_50...)
+	// combine all reports into "stock_sub_all"
+	low_stock_all := append(stock_sub_0, stock_sub_10...)
+	low_stock_all = append(low_stock_all, stock_sub_50...)
+
+	if len(lsd) <= 0 {
+		fmt.Println("No low stock found")
+		return lsd
+	}
 
 	// write to all the files
 	const header = "SKU,QUANTITY"
-	writeToPwd(filenameLowStockSub0, stock_sub_0, header)
-	writeToPwd(filenameLowStockSub10, stock_sub_10, header)
-	writeToPwd(filenameLowStockSub50, stock_sub_50, header)
+
+	//writeToPwd(filenameLowStockSub0, stock_sub_0, header)
+	//writeToPwd(filenameLowStockSub10, stock_sub_10, header)
+	//writeToPwd(filenameLowStockSub50, stock_sub_50, header)
 
 	writeToReportFolder(filenameLowStockSub0, stock_sub_0, header)
 	writeToReportFolder(filenameLowStockSub10, stock_sub_10, header)
 	writeToReportFolder(filenameLowStockSub50, stock_sub_50, header)
 
-	//now := time.Now()
-	// TODO: filename := fmt.Sprintf("low_stock%d%d.csv", now.Day(), now.Month())
-	writeToPwd(filenameLowStock, stock_sub_all, header)
+	writeToPwd(filenameLowStock, low_stock_all, header)
+	writeToReportFolder(filenameLowStock, low_stock_all, header)
 
-	return low_stock
+	return lsd
 }
 
-func reportNewLowStock(ols_data map[string]int, low_stock_data map[string]int) {
+func reportNewLowStock(olsd LowStockData, lsd LowStockData) {
 	var new_low_stock []string
 
 	// for every new low_stock SKUs
-	for sku := range low_stock_data {
-		q, in_old := ols_data[sku]
+	for sku := range lsd {
+		q, in_old := olsd[sku]
 
 		// skip SKU that is also in the old low_stock
 		if in_old {
@@ -155,7 +165,8 @@ func reportNewLowStock(ols_data map[string]int, low_stock_data map[string]int) {
 		const header string = "SKU,QUANTITY"
 		const filename string = filenameLowStockNew
 
-		writeToPwd(filename, new_low_stock, header)
+		writeToReportFolder(filename, new_low_stock, header)
+
 		fmt.Println("Changed file: " + filename)
 	} else {
 		fmt.Println("No new low stock found")
@@ -163,15 +174,15 @@ func reportNewLowStock(ols_data map[string]int, low_stock_data map[string]int) {
 
 }
 
-func reportWrongSKU(etsy_data map[string]string, money_data map[string]int) {
+func reportWrongSKU(ed EtsyData, md MoneyData) {
 	var wrong_sku []string
 
-	for sku := range etsy_data {
-		_, in_money := money_data[sku]
+	for sku := range ed {
+		_, in_money := md[sku]
 
 		// skip SKU that isn't in money_data
 		if !in_money {
-			title := strings.TrimSpace(etsy_data[sku])
+			title := strings.TrimSpace(ed[sku])
 			if len(title) > 60 {
 				title = title[:60]
 			}
@@ -183,20 +194,19 @@ func reportWrongSKU(etsy_data map[string]string, money_data map[string]int) {
 	if len(wrong_sku) > 0 {
 		const header string = "SKU,TITLE"
 		const filename string = filenameWrongSKU
-		writeToPwd(filename, wrong_sku, header)
 		writeToReportFolder(filename, wrong_sku, header)
 
-		fmt.Println("Changed file: " + filename)
+		fmt.Println("Generated: " + filename)
 	} else {
 		fmt.Println("No wrong SKUs found")
 	}
 }
 
-func reportRestock(ols_data map[string]int, money_data map[string]int) {
+func reportRestock(olsd LowStockData, md MoneyData) {
 	var restocks []string
 
-	for sku, old_q := range ols_data {
-		new_q, in_money := money_data[sku]
+	for sku, old_q := range olsd {
+		new_q, in_money := md[sku]
 		if !in_money {
 			continue
 		}
@@ -209,21 +219,20 @@ func reportRestock(ols_data map[string]int, money_data map[string]int) {
 	if len(restocks) > 0 {
 		const header = "SKU,OLD QUANTITY,NEW QUANTITY"
 		const filename string = filenameRestock
-		writeToPwd(filename, restocks, header)
-		writeToPwd(filename, restocks, header)
 
-		fmt.Println("Changed file: " + filename)
+		writeToReportFolder(filename, restocks, header)
 
+		fmt.Println("Generated: " + filename)
 	} else {
 		fmt.Println("No restocks found")
 	}
 
 }
 
-func writeToPwd(filename string, lines []string, header string) {
+func writeToPwd(fn string, lns []string, h string) {
 	pwd := getPwd()
 
-	fullFilePath := filepath.Join(pwd, filename)
+	fullFilePath := filepath.Join(pwd, fn)
 
 	f, err := os.Create(fullFilePath)
 	check(err)
@@ -232,17 +241,16 @@ func writeToPwd(filename string, lines []string, header string) {
 
 	w := bufio.NewWriter(f)
 
-	_, err = w.WriteString(strings.Join(append([]string{header}, lines...), "\n"))
+	_, err = w.WriteString(strings.Join(append([]string{h}, lns...), "\n"))
 	check(err)
 
 	w.Flush()
 }
 
-func writeToReportFolder(filename string, lines []string, header string) {
+func writeToReportFolder(fn string, lns []string, h string) {
 	pwd := getPwd()
 
-	n := time.Now().Local()
-	dateFolderName := fmt.Sprintf("%d%d%d_%d%d", n.Year(), n.Day(), n.Month(), n.Hour(), n.Minute())
+	dateFolderName := generateCurrentDateFolderName()
 	reportFilepath := filepath.Join(pwd, "reports", dateFolderName)
 
 	_, err := os.Stat(reportFilepath)
@@ -253,23 +261,28 @@ func writeToReportFolder(filename string, lines []string, header string) {
 	err = os.MkdirAll(reportFilepath, os.ModePerm)
 	check(err)
 
-	f, err := os.Create(filepath.Join(reportFilepath, filename))
+	f, err := os.Create(filepath.Join(reportFilepath, fn))
 	check(err)
 
 	defer f.Close()
 
 	w := bufio.NewWriter(f)
 
-	_, err = w.WriteString(strings.Join(append([]string{header}, lines...), "\n"))
+	_, err = w.WriteString(strings.Join(append([]string{h}, lns...), "\n"))
 	check(err)
 
 	w.Flush()
 }
 
+func generateCurrentDateFolderName() string {
+	n := time.Now().Local()
+	return fmt.Sprintf("%d%d%d_%02d%02d", n.Year(), n.Day(), n.Month(), n.Hour(), n.Minute())
+}
+
 // ==== LOADERS ====
 
-func loadEtsyData(filepath string) map[string]string {
-	f, err := os.Open(filepath)
+func loadEtsyData(fp string) EtsyData {
+	f, err := os.Open(fp)
 	check(err)
 
 	r := csv.NewReader(bufio.NewReader(f))
@@ -290,20 +303,20 @@ func loadEtsyData(filepath string) map[string]string {
 
 		check(err)
 
-		if strings.Contains(row[etsyColumnSKU], ",") {
+		if strings.Contains(row[EtsySKUColumn], ",") {
 			// split into SKUs
-			skus := strings.Split(row[etsyColumnSKU], ",")
+			skus := strings.Split(row[EtsySKUColumn], ",")
 
 			// add each SKU to map
 			for _, sku := range skus {
-				title := row[etsyColumnTitle]
+				title := row[EtsyTitleColumn]
 				etsy_listings[sku] = title
 			}
 
 		} else {
 			// add SKU to map
-			sku := row[etsyColumnSKU]
-			title := row[etsyColumnTitle]
+			sku := row[EtsySKUColumn]
+			title := row[EtsyTitleColumn]
 			etsy_listings[sku] = title[:1]
 		}
 	}
@@ -311,8 +324,8 @@ func loadEtsyData(filepath string) map[string]string {
 	return etsy_listings
 }
 
-func loadMoneyData(filepath string) map[string]int {
-	f, err := os.Open(filepath)
+func loadMoneyData(fp string) MoneyData {
+	f, err := os.Open(fp)
 	check(err)
 
 	r := csv.NewReader(bufio.NewReader(f))
@@ -333,9 +346,9 @@ func loadMoneyData(filepath string) map[string]int {
 		check(err)
 
 		// get current SKU
-		sku := row[moneyColumnSKU]
+		sku := row[MoneySKUColumn]
 		// load quantity as string
-		quantityString := row[moneyColumnQuantity]
+		quantityString := row[MoneyQuantityColumn]
 		// replace comma by period
 		quantityString = strings.ReplaceAll(quantityString, ",", ".")
 		// convert string to float
@@ -348,8 +361,8 @@ func loadMoneyData(filepath string) map[string]int {
 	return money_listings
 }
 
-func loadLowStockData(filepath string) map[string]int {
-	f, err := os.Open(filepath)
+func loadLowStockData(fp string) LowStockData {
+	f, err := os.Open(fp)
 	check(err)
 
 	r := csv.NewReader(bufio.NewReader(f))
@@ -370,9 +383,9 @@ func loadLowStockData(filepath string) map[string]int {
 		check(err)
 
 		// get current SKU
-		sku := row[olsColumnSKU]
+		sku := row[LsSKUColumn]
 		// load quantity as string
-		quantityString := row[olsColumnQuantity]
+		quantityString := row[LsQuantityColumn]
 		// replace comma by period
 		quantityString = strings.ReplaceAll(quantityString, ",", ".")
 		// convert string to float

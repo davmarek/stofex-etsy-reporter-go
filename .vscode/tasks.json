@@ -1,0 +1,19 @@
+// Recommended extension:
+// Task Runner
+// by Sana Ajani
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build and run",
+      "type": "shell",
+      "command": "go build main.go && ./main",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "showReuseMessage": false,
+        "clear": true
+      }
+    }
+  ]
+}
