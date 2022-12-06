@@ -88,7 +88,6 @@ func main() {
 func getPwd() string {
 	ex, err := os.Executable()
 	check(err)
-	fmt.Println(ex)
 	return filepath.Dir(ex)
 }
 
@@ -125,6 +124,8 @@ func reportLowStock(ed EtsyData, md MoneyData) LowStockData {
 	if len(lsd) <= 0 {
 		fmt.Println("No low stock found")
 		return lsd
+	} else {
+		fmt.Println("Low stock found. Generating reports..")
 	}
 
 	// write to all the files
