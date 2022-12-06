@@ -25,8 +25,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v3
         with:
-          go-version: 1.19.3
-
+          go-version: 1.19
       - name: Generate build file
         run: env GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -o "dist/${{ matrix.os }}-${{ matrix.arch }}/rep${{ (matrix.os == 'windows') && '.exe' || '' }}"
 
